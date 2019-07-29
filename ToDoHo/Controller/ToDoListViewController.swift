@@ -7,18 +7,19 @@
 //
 
 import UIKit
-
+import CoreData
 class ToDoListViewController: UITableViewController {
     
     var itemArray = [Item]()
     let itemArrayKey = "ToDoListArray"
     let filePath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?.appendingPathComponent("Items.plist")
-  
-    
+    let context = (UIApplication.shared.delegate as! AppDelegate).persistentContainer.viewContext
+    var textInSearchBar = ""
+
     
     override func viewDidLoad() {
         super.viewDidLoad()
-        decode()
+        loadItems()
     }
 
     
@@ -44,7 +45,7 @@ class ToDoListViewController: UITableViewController {
         
         //Checking and uncheking the To-Do
         itemArray[indexPath.row].done = !itemArray[indexPath.row].done
-        encode()
+        saveItems()
         tableView.deselectRow(at: indexPath, animated: true)
         
     }
@@ -55,10 +56,12 @@ class ToDoListViewController: UITableViewController {
         var newText = UITextField()
         let alert = UIAlertController(title: "New Item", message: "", preferredStyle: .alert)
         let action = UIAlertAction(title: "Add", style: .default) { (action) in
-            let item = Item()
+     
+            let item = Item(context: self.context)
             item.title = newText.text!
+            item.done = false
             self.itemArray.append(item)
-            self.encode()
+            self.saveItems()
         }
         alert.addAction(action)
         alert.addTextField { (textField) in
@@ -68,27 +71,52 @@ class ToDoListViewController: UITableViewController {
         present(alert, animated: true, completion: nil)
     }
     
-    //MARK - Encoding and Decoding Data
-    func encode(){
-        let encoder = PropertyListEncoder()
+    //MARK - Data Manipulation
+    func saveItems(){
         do{
-            let data = try encoder.encode(self.itemArray)
-            try data.write(to: self.filePath!)
+           try context.save()
         }catch{
-            print("Error")
+            print(error)
         }
         tableView.reloadData()
     }
     
-    func decode(){
-        let decoder = PropertyListDecoder()
+    func loadItems(with request : NSFetchRequest<Item> = Item.fetchRequest()){
         do{
-           let data = try Data(contentsOf: filePath!)
-            itemArray = try decoder.decode([Item].self, from: data)
-
+           try itemArray = context.fetch(request)
         }catch{
             print(error)
         }
+        tableView.reloadData()
     }
+    
+  
 }
+//MARK - Search Bar Delegate Methods
 
+extension ToDoListViewController : UISearchBarDelegate {
+    func searchBarSearchButtonClicked(_ searchBar: UISearchBar) {
+        textInSearchBar = searchBar.text!
+        searchFunc()
+    }
+    func searchFunc(){
+        let request : NSFetchRequest<Item> = Item.fetchRequest()
+        request.predicate = NSPredicate(format: "title CONTAINS[cd] %@", textInSearchBar)
+        request.sortDescriptors = [NSSortDescriptor(key: "title", ascending: true)]
+        loadItems(with : request)
+
+    }
+    func searchBar(_ searchBar: UISearchBar, textDidChange searchText: String) {
+        textInSearchBar = searchBar.text!
+        if textInSearchBar == ""{
+            loadItems()
+            DispatchQueue.main.async {
+                searchBar.resignFirstResponder()
+            }
+        }else{
+            searchFunc()
+        }
+    }
+ 
+  
+}
